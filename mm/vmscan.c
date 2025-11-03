@@ -1814,10 +1814,8 @@ free_it:
 		trace_android_vh_page_trylock_clear(page);
 		if (unlikely(PageTransHuge(page)))
 			destroy_compound_page(page);
-		else {
-			trace_android_vh_page_trylock_clear(page);
+		else
 			list_add(&page->lru, &free_pages);
-		}
 		continue;
 
 activate_locked_split:
@@ -4197,6 +4195,8 @@ restart:
 	smp_store_release(&lrugen->max_seq, lrugen->max_seq + 1);
 
 	spin_unlock_irq(&lruvec->lru_lock);
+
+	trace_android_vh_mglru_new_gen(NULL);
 }
 
 static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long max_seq,
@@ -5827,7 +5827,7 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 /* Use reclaim/compaction for costly allocs or under memory pressure */
 static bool in_reclaim_compaction(struct scan_control *sc)
 {
-	if (IS_ENABLED(CONFIG_COMPACTION) && sc->order &&
+	if (gfp_compaction_allowed(sc->gfp_mask) && sc->order &&
 			(sc->order > PAGE_ALLOC_COSTLY_ORDER ||
 			 sc->priority < DEF_PRIORITY - 2))
 		return true;
@@ -6071,6 +6071,9 @@ static inline bool compaction_ready(struct zone *zone, struct scan_control *sc)
 {
 	unsigned long watermark;
 	enum compact_result suitable;
+
+	if (!gfp_compaction_allowed(sc->gfp_mask))
+		return false;
 
 	suitable = compaction_suitable(zone, sc->order, 0, sc->reclaim_idx);
 	if (suitable == COMPACT_SUCCESS)
